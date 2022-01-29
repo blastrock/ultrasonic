@@ -145,6 +145,13 @@ class MediaPlayerController(
     }
 
     @Synchronized
+    fun softStart() {
+        executeOnStartedMediaPlayerService { service: MediaPlayerService ->
+            service.softStart()
+        }
+    }
+
+    @Synchronized
     fun seekTo(position: Int) {
         val mediaPlayerService = runningInstance
         mediaPlayerService?.seekTo(position)
@@ -154,6 +161,12 @@ class MediaPlayerController(
     fun pause() {
         val mediaPlayerService = runningInstance
         mediaPlayerService?.pause()
+    }
+
+    @Synchronized
+    fun softPause() {
+        val mediaPlayerService = runningInstance
+        mediaPlayerService?.softPause()
     }
 
     @Synchronized

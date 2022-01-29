@@ -144,9 +144,12 @@ class LocalMediaPlayer : KoinComponent {
     @Synchronized
     fun setPlayerState(playerState: PlayerState, track: DownloadFile?) {
         Timber.i("%s -> %s (%s)", this.playerState.name, playerState.name, track)
+        val oldState = this.playerState
         this.playerState = playerState
-        if (playerState === PlayerState.STARTED) {
+        if (oldState !== PlayerState.STARTED && playerState === PlayerState.STARTED) {
             audioFocusHandler.requestAudioFocus()
+        } else if (oldState === PlayerState.STARTED && playerState !== PlayerState.STARTED) {
+            audioFocusHandler.abandonAudioFocus()
         }
 
         RxBus.playerStatePublisher.onNext(RxBus.StateWithTrack(playerState, track))

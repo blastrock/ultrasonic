@@ -319,6 +319,17 @@ class MediaPlayerService : Service() {
     }
 
     @Synchronized
+    fun softPause() {
+        if (localMediaPlayer.playerState === PlayerState.STARTED) {
+            if (jukeboxMediaPlayer.isEnabled) {
+                jukeboxMediaPlayer.stop()
+            } else {
+                localMediaPlayer.pause()
+            }
+        }
+    }
+
+    @Synchronized
     fun stop() {
         if (localMediaPlayer.playerState === PlayerState.STARTED) {
             if (jukeboxMediaPlayer.isEnabled) {
@@ -338,6 +349,15 @@ class MediaPlayerService : Service() {
             localMediaPlayer.start()
         }
         localMediaPlayer.setPlayerState(PlayerState.STARTED, localMediaPlayer.currentPlaying)
+    }
+
+    @Synchronized
+    fun softStart() {
+        if (jukeboxMediaPlayer.isEnabled) {
+            jukeboxMediaPlayer.start()
+        } else {
+            localMediaPlayer.start()
+        }
     }
 
     private fun updateWidget(playerState: PlayerState, song: MusicDirectory.Entry?) {

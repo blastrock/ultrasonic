@@ -40,6 +40,13 @@ class AudioFocusHandler(private val context: Context) {
         }
     }
 
+    fun abandonAudioFocus() {
+        if (hasFocus) {
+            hasFocus = false
+            AudioManagerCompat.abandonAudioFocusRequest(audioManager, focusRequest)
+        }
+    }
+
     private val listener = OnAudioFocusChangeListener { focusChange ->
 
         val mediaPlayerController = mediaPlayerControllerLazy.value
@@ -49,7 +56,7 @@ class AudioFocusHandler(private val context: Context) {
                 Timber.v("Regained Audio Focus")
                 if (pauseFocus) {
                     pauseFocus = false
-                    mediaPlayerController.start()
+                    mediaPlayerController.softStart()
                 } else if (lowerFocus) {
                     lowerFocus = false
                     mediaPlayerController.setVolume(1.0f)
@@ -59,7 +66,6 @@ class AudioFocusHandler(private val context: Context) {
                 if (!mediaPlayerController.isJukeboxEnabled) {
                     hasFocus = false
                     mediaPlayerController.pause()
-                    AudioManagerCompat.abandonAudioFocusRequest(audioManager, focusRequest)
                     Timber.v("Abandoned Audio Focus")
                 }
             }
@@ -70,7 +76,7 @@ class AudioFocusHandler(private val context: Context) {
                     if (mediaPlayerController.playerState === PlayerState.STARTED) {
                         if (lossPref == 0 || lossPref == 1) {
                             pauseFocus = true
-                            mediaPlayerController.pause()
+                            mediaPlayerController.softPause()
                         }
                     }
                 }
@@ -85,7 +91,7 @@ class AudioFocusHandler(private val context: Context) {
                             mediaPlayerController.setVolume(0.1f)
                         } else if (lossPref == 0 || lossPref == 1) {
                             pauseFocus = true
-                            mediaPlayerController.pause()
+                            mediaPlayerController.softPause()
                         }
                     }
                 }
