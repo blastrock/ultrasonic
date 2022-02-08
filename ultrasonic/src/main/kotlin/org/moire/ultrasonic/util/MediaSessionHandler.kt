@@ -162,8 +162,6 @@ class MediaSessionHandler : KoinComponent {
         }
         )
 
-        // It seems to be the best practice to set this to true for the lifetime of the session
-        mediaSession?.isActive = true
         rxBusSubscription += RxBus.playbackPositionObservable.subscribe {
             updateMediaSessionPlaybackPosition(it)
         }
@@ -218,6 +216,8 @@ class MediaSessionHandler : KoinComponent {
         // TODO: Synchronize these APIs
         when (playerState) {
             PlayerState.STARTED -> {
+                if (mediaSession?.isActive == false)
+                    mediaSession?.isActive = true
                 playbackState = PlaybackStateCompat.STATE_PLAYING
                 playbackActions = playbackActions!! or
                     PlaybackStateCompat.ACTION_PAUSE or
@@ -225,10 +225,14 @@ class MediaSessionHandler : KoinComponent {
             }
             PlayerState.COMPLETED,
             PlayerState.STOPPED -> {
+                if (mediaSession?.isActive == true)
+                    mediaSession?.isActive = false
                 playbackState = PlaybackStateCompat.STATE_STOPPED
                 cachedPosition = PLAYBACK_POSITION_UNKNOWN
             }
             PlayerState.IDLE -> {
+                if (mediaSession?.isActive == true)
+                    mediaSession?.isActive = false
                 // IDLE state usually just means the playback is stopped
                 // STATE_NONE means that there is no track to play (playlist is empty)
                 playbackState = if (currentPlaying == null)
