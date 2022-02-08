@@ -29,12 +29,10 @@ import org.moire.ultrasonic.audiofx.EqualizerController
 import org.moire.ultrasonic.audiofx.VisualizerController
 import org.moire.ultrasonic.data.ActiveServerProvider.Companion.isOffline
 import org.moire.ultrasonic.domain.PlayerState
-import org.moire.ultrasonic.util.CancellableTask
 import org.moire.ultrasonic.util.Constants
 import org.moire.ultrasonic.util.Settings
 import org.moire.ultrasonic.util.Storage
 import org.moire.ultrasonic.util.StreamProxy
-import org.moire.ultrasonic.util.Util
 import timber.log.Timber
 import java.lang.Runnable
 
@@ -72,7 +70,6 @@ class LocalMediaPlayer : KoinComponent {
     private var nextMediaPlayer: MediaPlayer? = null
     private var cachedPosition = 0
     private var proxy: StreamProxy? = null
-    private var bufferTask: CancellableTask? = null
 
     private val pm = context.getSystemService(POWER_SERVICE) as PowerManager
     private val wakeLock: WakeLock = pm.newWakeLock(PARTIAL_WAKE_LOCK, this.javaClass.name)
@@ -81,6 +78,7 @@ class LocalMediaPlayer : KoinComponent {
 
     private val mediaPlayerScope = CoroutineScope(Job() + Dispatchers.Main)
     private var positionCacheScope: CoroutineScope? = null
+    private val bufferScope = CoroutineScope(Job() + Dispatchers.Main)
     private val nextPlayingScope = CoroutineScope(Job() + Dispatchers.Main)
 
     fun init() {
@@ -135,9 +133,7 @@ class LocalMediaPlayer : KoinComponent {
             if (nextMediaPlayer != null) {
                 nextMediaPlayer!!.release()
             }
-            if (bufferTask != null) {
-                bufferTask!!.cancel()
-            }
+            bufferScope.coroutineContext.cancelChildren()
             nextPlayingScope.coroutineContext.cancelChildren()
 
             wakeLock.release()
@@ -318,8 +314,9 @@ class LocalMediaPlayer : KoinComponent {
     private fun bufferAndPlay(fileToPlay: DownloadFile, position: Int, autoStart: Boolean) {
         if (playerState !== PlayerState.PREPARED && !fileToPlay.isWorkDone) {
             reset()
-            bufferTask = BufferTask(fileToPlay, position, autoStart)
-            bufferTask!!.start()
+            bufferScope.launch {
+                bufferLoop(fileToPlay, position, autoStart)
+            }
         } else {
             doPlay(fileToPlay, position, autoStart)
         }
@@ -542,8 +539,9 @@ class LocalMediaPlayer : KoinComponent {
                 } else {
                     Timber.i("Requesting restart from %d of %d", pos, duration)
                     reset()
-                    bufferTask = BufferTask(downloadFile, pos)
-                    bufferTask!!.start()
+                    bufferScope.launch {
+                        bufferLoop(downloadFile, pos, true)
+                    }
                 }
             }
         })
@@ -551,9 +549,7 @@ class LocalMediaPlayer : KoinComponent {
 
     @Synchronized
     fun reset() {
-        if (bufferTask != null) {
-            bufferTask!!.cancel()
-        }
+        bufferScope.coroutineContext.cancelChildren()
 
         resetMediaPlayer()
 
@@ -578,57 +574,40 @@ class LocalMediaPlayer : KoinComponent {
         }
     }
 
-    private inner class BufferTask(
-        private val downloadFile: DownloadFile,
-        private val position: Int,
-        private val autoStart: Boolean = true
-    ) : CancellableTask() {
-        private val expectedFileSize: Long
-        private val partialFile: String = downloadFile.partialFile
-
-        override fun execute() {
-            setPlayerState(PlayerState.DOWNLOADING, downloadFile)
-            while (!bufferComplete() && !isOffline()) {
-                Util.sleepQuietly(1000L)
-                if (isCancelled) {
-                    return
-                }
-            }
-
-            doPlay(downloadFile, position, autoStart)
+    private suspend fun bufferLoop(downloadFile: DownloadFile, position: Int, autoStart: Boolean) {
+        var bufferLength = Settings.bufferLength.toLong()
+        if (bufferLength == 0L) {
+            // Set to seconds in a day, basically infinity
+            bufferLength = 86400L
         }
 
-        private fun bufferComplete(): Boolean {
-            val completeFileAvailable = downloadFile.isWorkDone
-            val size = Storage.getFromPath(partialFile)?.length ?: 0
+        // Calculate roughly how many bytes BUFFER_LENGTH_SECONDS corresponds to.
+        val bitRate = downloadFile.getBitRate()
+        val byteCount = max(100000, bitRate * 1024L / 8L * bufferLength)
 
-            Timber.i(
-                "Buffering %s (%d/%d, %s)",
-                partialFile, size, expectedFileSize, completeFileAvailable
-            )
+        // Find out how large the file should grow before resuming playback.
+        Timber.i("Buffering from position %d and bitrate %d", position, bitRate)
+        val expectedFileSize = position * bitRate / 8 + byteCount
 
-            return completeFileAvailable || size >= expectedFileSize
+        setPlayerState(PlayerState.DOWNLOADING, downloadFile)
+        while (!isBufferComplete(downloadFile, expectedFileSize) && !isOffline()) {
+            delay(1000)
         }
 
-        override fun toString(): String {
-            return String.format("BufferTask (%s)", downloadFile)
-        }
+        doPlay(downloadFile, position, autoStart)
+    }
 
-        init {
-            var bufferLength = Settings.bufferLength.toLong()
-            if (bufferLength == 0L) {
-                // Set to seconds in a day, basically infinity
-                bufferLength = 86400L
-            }
+    private fun isBufferComplete(downloadFile: DownloadFile, expectedFileSize: Long): Boolean {
+        val partialFile = downloadFile.partialFile
+        val completeFileAvailable = downloadFile.isWorkDone
+        val size = Storage.getFromPath(partialFile)?.length ?: 0
 
-            // Calculate roughly how many bytes BUFFER_LENGTH_SECONDS corresponds to.
-            val bitRate = downloadFile.getBitRate()
-            val byteCount = max(100000, bitRate * 1024L / 8L * bufferLength)
+        Timber.i(
+            "Buffering %s (%d/%d, %s)",
+            partialFile, size, expectedFileSize, completeFileAvailable
+        )
 
-            // Find out how large the file should grow before resuming playback.
-            Timber.i("Buffering from position %d and bitrate %d", position, bitRate)
-            expectedFileSize = position * bitRate / 8 + byteCount
-        }
+        return completeFileAvailable || size >= expectedFileSize
     }
 
     private suspend fun checkCompletionLoop(downloadFile: DownloadFile) {
