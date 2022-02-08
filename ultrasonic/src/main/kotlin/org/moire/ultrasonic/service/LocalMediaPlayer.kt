@@ -13,7 +13,6 @@ import android.content.Intent
 import android.media.MediaPlayer
 import android.media.MediaPlayer.OnCompletionListener
 import android.media.audiofx.AudioEffect
-import android.os.Handler
 import android.os.PowerManager
 import android.os.PowerManager.PARTIAL_WAKE_LOCK
 import android.os.PowerManager.WakeLock
@@ -34,7 +33,6 @@ import org.moire.ultrasonic.util.Settings
 import org.moire.ultrasonic.util.Storage
 import org.moire.ultrasonic.util.StreamProxy
 import timber.log.Timber
-import java.lang.Runnable
 
 /**
  * Represents a Media Player which uses the mobile's resources for playback
@@ -233,9 +231,7 @@ class LocalMediaPlayer : KoinComponent {
 
         attachHandlersToPlayer(mediaPlayer, nextPlaying!!, false)
 
-        postRunnable {
-            onNextSongRequested?.let { it() }
-        }
+        onNextSongRequested?.let { it() }
 
         // Proxy should not be being used here since the next player was already setup to play
         proxy?.stop()
@@ -411,9 +407,7 @@ class LocalMediaPlayer : KoinComponent {
                     setPlayerState(PlayerState.PAUSED, downloadFile)
                 }
 
-                postRunnable {
-                    onPrepared?.let { it() }
-                }
+                onPrepared?.let { it() }
             }
 
             attachHandlersToPlayer(mediaPlayer, downloadFile, partial)
@@ -520,11 +514,7 @@ class LocalMediaPlayer : KoinComponent {
                         }
                         playNext()
                     } else {
-                        if (onSongCompleted != null) {
-                            val mainHandler = Handler(context.mainLooper)
-                            val myRunnable = Runnable { onSongCompleted!!(currentPlaying) }
-                            mainHandler.post(myRunnable)
-                        }
+                        onSongCompleted?.let { it(currentPlaying) }
                     }
                     return
                 }
@@ -664,13 +654,5 @@ class LocalMediaPlayer : KoinComponent {
     private fun handleErrorNext(x: Exception) {
         Timber.w(x, "Next Media player error")
         nextMediaPlayer!!.reset()
-    }
-
-    private fun postRunnable(runnable: Runnable?) {
-        if (runnable != null) {
-            val mainHandler = Handler(context.mainLooper)
-            val myRunnable = Runnable { runnable.run() }
-            mainHandler.post(myRunnable)
-        }
     }
 }
