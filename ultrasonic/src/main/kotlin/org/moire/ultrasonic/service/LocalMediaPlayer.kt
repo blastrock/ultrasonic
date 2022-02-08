@@ -68,7 +68,6 @@ class LocalMediaPlayer : KoinComponent {
 
     private var nextPlayerState = PlayerState.IDLE
     private var nextSetup = false
-    private var nextPlayingTask: CancellableTask? = null
     private var mediaPlayer: MediaPlayer = MediaPlayer()
     private var nextMediaPlayer: MediaPlayer? = null
     private var cachedPosition = 0
@@ -82,6 +81,7 @@ class LocalMediaPlayer : KoinComponent {
 
     private val mediaPlayerScope = CoroutineScope(Job() + Dispatchers.Main)
     private var positionCacheScope: CoroutineScope? = null
+    private val nextPlayingScope = CoroutineScope(Job() + Dispatchers.Main)
 
     fun init() {
         mediaPlayer.setWakeMode(context, PARTIAL_WAKE_LOCK)
@@ -138,9 +138,7 @@ class LocalMediaPlayer : KoinComponent {
             if (bufferTask != null) {
                 bufferTask!!.cancel()
             }
-            if (nextPlayingTask != null) {
-                nextPlayingTask!!.cancel()
-            }
+            nextPlayingScope.coroutineContext.cancelChildren()
 
             wakeLock.release()
         } catch (exception: Throwable) {
@@ -187,8 +185,10 @@ class LocalMediaPlayer : KoinComponent {
     @Synchronized
     fun setNextPlaying(nextToPlay: DownloadFile) {
         nextPlaying = nextToPlay
-        nextPlayingTask = CheckCompletionTask(nextPlaying)
-        nextPlayingTask?.start()
+        setNextPlayerState(PlayerState.IDLE)
+        nextPlayingScope.launch {
+            checkCompletionLoop(nextToPlay)
+        }
     }
 
     /*
@@ -198,10 +198,7 @@ class LocalMediaPlayer : KoinComponent {
     fun clearNextPlaying(setIdle: Boolean) {
         nextSetup = false
         nextPlaying = null
-        if (nextPlayingTask != null) {
-            nextPlayingTask!!.cancel()
-            nextPlayingTask = null
-        }
+        nextPlayingScope.coroutineContext.cancelChildren()
 
         if (setIdle) {
             setNextPlayerState(PlayerState.IDLE)
@@ -221,10 +218,7 @@ class LocalMediaPlayer : KoinComponent {
     @Synchronized
     @JvmOverloads
     fun play(fileToPlay: DownloadFile?, position: Int = 0, autoStart: Boolean = true) {
-        if (nextPlayingTask != null) {
-            nextPlayingTask!!.cancel()
-            nextPlayingTask = null
-        }
+        nextPlayingScope.coroutineContext.cancelChildren()
         setCurrentPlaying(fileToPlay)
 
         if (fileToPlay != null) {
@@ -637,49 +631,27 @@ class LocalMediaPlayer : KoinComponent {
         }
     }
 
-    private inner class CheckCompletionTask(downloadFile: DownloadFile?) : CancellableTask() {
-        private val downloadFile: DownloadFile?
-        private val partialFile: String?
-        override fun execute() {
-            Thread.currentThread().name = "CheckCompletionTask"
-            if (downloadFile == null) {
-                return
-            }
-
-            // Do an initial sleep so this prepare can't compete with main prepare
-            Util.sleepQuietly(5000L)
-            while (!bufferComplete()) {
-                Util.sleepQuietly(5000L)
-                if (isCancelled) {
-                    return
-                }
-            }
-
-            // Start the setup of the next media player
-            setupNext(downloadFile)
+    private suspend fun checkCompletionLoop(downloadFile: DownloadFile) {
+        // Do an initial sleep so this prepare can't compete with main prepare
+        delay(5000)
+        while (!nextBufferComplete(downloadFile)) {
+            delay(5000)
         }
 
-        private fun bufferComplete(): Boolean {
-            val completeFileAvailable = downloadFile!!.isWorkDone
-            val state = (playerState === PlayerState.STARTED || playerState === PlayerState.PAUSED)
+        // Start the setup of the next media player
+        setupNext(downloadFile)
+    }
 
-            val length = if (partialFile == null) 0
-            else Storage.getFromPath(partialFile)?.length ?: 0
+    private fun nextBufferComplete(downloadFile: DownloadFile): Boolean {
+        val partialFile = downloadFile.partialFile
+        val completeFileAvailable = downloadFile.isWorkDone
+        val state = (playerState === PlayerState.STARTED || playerState === PlayerState.PAUSED)
 
-            Timber.i("Buffering next %s (%d)", partialFile, length)
+        val length = Storage.getFromPath(partialFile)?.length ?: 0
 
-            return completeFileAvailable && state
-        }
+        Timber.i("Buffering next %s (%d)", partialFile, length)
 
-        override fun toString(): String {
-            return String.format("CheckCompletionTask (%s)", downloadFile)
-        }
-
-        init {
-            setNextPlayerState(PlayerState.IDLE)
-            this.downloadFile = downloadFile
-            partialFile = downloadFile?.partialFile
-        }
+        return completeFileAvailable && state
     }
 
     private suspend fun cachePositionLoop() {
