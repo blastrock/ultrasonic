@@ -14,7 +14,6 @@ import android.media.MediaPlayer
 import android.media.MediaPlayer.OnCompletionListener
 import android.media.audiofx.AudioEffect
 import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
 import android.os.PowerManager.PARTIAL_WAKE_LOCK
 import android.os.PowerManager.WakeLock
@@ -72,8 +71,6 @@ class LocalMediaPlayer : KoinComponent {
     private var nextPlayingTask: CancellableTask? = null
     private var mediaPlayer: MediaPlayer = MediaPlayer()
     private var nextMediaPlayer: MediaPlayer? = null
-    private var mediaPlayerLooper: Looper? = null
-    private var mediaPlayerHandler: Handler? = null
     private var cachedPosition = 0
     private var proxy: StreamProxy? = null
     private var bufferTask: CancellableTask? = null
@@ -87,33 +84,26 @@ class LocalMediaPlayer : KoinComponent {
     private var positionCacheScope: CoroutineScope? = null
 
     fun init() {
-        Thread {
-            Thread.currentThread().name = "MediaPlayerThread"
-            Looper.prepare()
-            mediaPlayer.setWakeMode(context, PARTIAL_WAKE_LOCK)
-            mediaPlayer.setOnErrorListener { _, what, more ->
-                handleError(
-                    Exception(
-                        String.format(
-                            Locale.getDefault(),
-                            "MediaPlayer error: %d (%d)", what, more
-                        )
+        mediaPlayer.setWakeMode(context, PARTIAL_WAKE_LOCK)
+        mediaPlayer.setOnErrorListener { _, what, more ->
+            handleError(
+                Exception(
+                    String.format(
+                        Locale.getDefault(),
+                        "MediaPlayer error: %d (%d)", what, more
                     )
                 )
-                false
-            }
-            try {
-                val i = Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION)
-                i.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, mediaPlayer.audioSessionId)
-                i.putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
-                context.sendBroadcast(i)
-            } catch (ignored: Throwable) {
-                // Froyo or lower
-            }
-            mediaPlayerLooper = Looper.myLooper()
-            mediaPlayerHandler = Handler(mediaPlayerLooper!!)
-            Looper.loop()
-        }.start()
+            )
+            false
+        }
+        try {
+            val i = Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION)
+            i.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, mediaPlayer.audioSessionId)
+            i.putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
+            context.sendBroadcast(i)
+        } catch (ignored: Throwable) {
+            // Froyo or lower
+        }
 
         // Create Equalizer and Visualizer in background as this can potentially take some time
         mediaPlayerScope.launch(Dispatchers.IO) {
@@ -145,7 +135,6 @@ class LocalMediaPlayer : KoinComponent {
             if (nextMediaPlayer != null) {
                 nextMediaPlayer!!.release()
             }
-            mediaPlayerLooper!!.quit()
             if (bufferTask != null) {
                 bufferTask!!.cancel()
             }
@@ -163,9 +152,7 @@ class LocalMediaPlayer : KoinComponent {
     @Synchronized
     fun setPlayerState(playerState: PlayerState, track: DownloadFile?) {
         Timber.i("%s -> %s (%s)", this.playerState.name, playerState.name, track)
-        synchronized(playerState) {
-            this.playerState = playerState
-        }
+        this.playerState = playerState
         if (playerState === PlayerState.STARTED) {
             audioFocusHandler.requestAudioFocus()
         }
@@ -421,18 +408,16 @@ class LocalMediaPlayer : KoinComponent {
                     secondaryProgress.postValue(playerDuration)
                 }
 
-                synchronized(this@LocalMediaPlayer) {
-                    if (position != 0) {
-                        Timber.i("Restarting player from position %d", position)
-                        seekTo(position)
-                    }
-                    cachedPosition = position
-                    if (start) {
-                        mediaPlayer.start()
-                        setPlayerState(PlayerState.STARTED, downloadFile)
-                    } else {
-                        setPlayerState(PlayerState.PAUSED, downloadFile)
-                    }
+                if (position != 0) {
+                    Timber.i("Restarting player from position %d", position)
+                    seekTo(position)
+                }
+                cachedPosition = position
+                if (start) {
+                    mediaPlayer.start()
+                    setPlayerState(PlayerState.STARTED, downloadFile)
+                } else {
+                    setPlayerState(PlayerState.PAUSED, downloadFile)
                 }
 
                 postRunnable {
@@ -553,20 +538,18 @@ class LocalMediaPlayer : KoinComponent {
                     return
                 }
 
-                synchronized(this) {
-                    if (downloadFile.isWorkDone) {
-                        // Complete was called early even though file is fully buffered
-                        Timber.i("Requesting restart from %d of %d", pos, duration)
-                        reset()
-                        downloadFile.setPlaying(false)
-                        doPlay(downloadFile, pos, true)
-                        downloadFile.setPlaying(true)
-                    } else {
-                        Timber.i("Requesting restart from %d of %d", pos, duration)
-                        reset()
-                        bufferTask = BufferTask(downloadFile, pos)
-                        bufferTask!!.start()
-                    }
+                if (downloadFile.isWorkDone) {
+                    // Complete was called early even though file is fully buffered
+                    Timber.i("Requesting restart from %d of %d", pos, duration)
+                    reset()
+                    downloadFile.setPlaying(false)
+                    doPlay(downloadFile, pos, true)
+                    downloadFile.setPlaying(true)
+                } else {
+                    Timber.i("Requesting restart from %d of %d", pos, duration)
+                    reset()
+                    bufferTask = BufferTask(downloadFile, pos)
+                    bufferTask!!.start()
                 }
             }
         })
@@ -673,7 +656,7 @@ class LocalMediaPlayer : KoinComponent {
             }
 
             // Start the setup of the next media player
-            mediaPlayerHandler!!.post { setupNext(downloadFile) }
+            setupNext(downloadFile)
         }
 
         private fun bufferComplete(): Boolean {
@@ -704,10 +687,8 @@ class LocalMediaPlayer : KoinComponent {
         while (true) {
             try {
                 if (playerState === PlayerState.STARTED) {
-                    synchronized(playerState) {
-                        if (playerState === PlayerState.STARTED) {
-                            cachedPosition = mediaPlayer.currentPosition
-                        }
+                    if (playerState === PlayerState.STARTED) {
+                        cachedPosition = mediaPlayer.currentPosition
                     }
                     RxBus.playbackPositionPublisher.onNext(cachedPosition)
                 }
