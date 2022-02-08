@@ -83,6 +83,7 @@ class LocalMediaPlayer : KoinComponent {
 
     val secondaryProgress: MutableLiveData<Int> = MutableLiveData(0)
 
+    private val mediaPlayerScope = CoroutineScope(Job() + Dispatchers.Main)
     private var positionCacheScope: CoroutineScope? = null
 
     fun init() {
@@ -114,17 +115,18 @@ class LocalMediaPlayer : KoinComponent {
             Looper.loop()
         }.start()
 
-        // Create Equalizer and Visualizer on a new thread as this can potentially take some time
-        Thread {
+        // Create Equalizer and Visualizer in background as this can potentially take some time
+        mediaPlayerScope.launch(Dispatchers.IO) {
             EqualizerController.create(context, mediaPlayer)
             VisualizerController.create(mediaPlayer)
-        }.start()
+        }
 
         wakeLock.setReferenceCounted(false)
         Timber.i("LocalMediaPlayer created")
     }
 
     fun release() {
+        mediaPlayerScope.coroutineContext.cancelChildren()
         // Calling reset() will result in changing this player's state. If we allow
         // the onPlayerStateChanged callback, then the state change will cause this
         // to resurrect the media session which has just been destroyed.
