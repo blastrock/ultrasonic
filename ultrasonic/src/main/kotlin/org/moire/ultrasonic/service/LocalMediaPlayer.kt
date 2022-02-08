@@ -19,6 +19,7 @@ import android.os.PowerManager
 import android.os.PowerManager.PARTIAL_WAKE_LOCK
 import android.os.PowerManager.WakeLock
 import androidx.lifecycle.MutableLiveData
+import kotlinx.coroutines.*
 import java.net.URLEncoder
 import java.util.Locale
 import kotlin.math.abs
@@ -36,6 +37,7 @@ import org.moire.ultrasonic.util.Storage
 import org.moire.ultrasonic.util.StreamProxy
 import org.moire.ultrasonic.util.Util
 import timber.log.Timber
+import java.lang.Runnable
 
 /**
  * Represents a Media Player which uses the mobile's resources for playback
@@ -75,12 +77,13 @@ class LocalMediaPlayer : KoinComponent {
     private var cachedPosition = 0
     private var proxy: StreamProxy? = null
     private var bufferTask: CancellableTask? = null
-    private var positionCache: PositionCache? = null
 
     private val pm = context.getSystemService(POWER_SERVICE) as PowerManager
     private val wakeLock: WakeLock = pm.newWakeLock(PARTIAL_WAKE_LOCK, this.javaClass.name)
 
     val secondaryProgress: MutableLiveData<Int> = MutableLiveData(0)
+
+    private var positionCacheScope: CoroutineScope? = null
 
     fun init() {
         Thread {
@@ -167,13 +170,14 @@ class LocalMediaPlayer : KoinComponent {
 
         RxBus.playerStatePublisher.onNext(RxBus.StateWithTrack(playerState, track))
 
-        if (playerState === PlayerState.STARTED && positionCache == null) {
-            positionCache = PositionCache()
-            val thread = Thread(positionCache)
-            thread.start()
-        } else if (playerState !== PlayerState.STARTED && positionCache != null) {
-            positionCache!!.stop()
-            positionCache = null
+        if (playerState === PlayerState.STARTED && positionCacheScope == null) {
+            positionCacheScope = CoroutineScope(Job() + Dispatchers.Main)
+            positionCacheScope!!.launch {
+                cachePositionLoop()
+            }
+        } else if (playerState !== PlayerState.STARTED && positionCacheScope != null) {
+            positionCacheScope!!.cancel()
+            positionCacheScope = null
         }
     }
 
@@ -691,32 +695,23 @@ class LocalMediaPlayer : KoinComponent {
         }
     }
 
-    private inner class PositionCache : Runnable {
-        var isRunning = true
-        fun stop() {
-            isRunning = false
-        }
-
-        override fun run() {
-            Thread.currentThread().name = "PositionCache"
-
-            // Stop checking position before the song reaches completion
-            while (isRunning) {
-                try {
-                    if (playerState === PlayerState.STARTED) {
-                        synchronized(playerState) {
-                            if (playerState === PlayerState.STARTED) {
-                                cachedPosition = mediaPlayer.currentPosition
-                            }
+    private suspend fun cachePositionLoop() {
+        // Stop checking position before the song reaches completion
+        while (true) {
+            try {
+                if (playerState === PlayerState.STARTED) {
+                    synchronized(playerState) {
+                        if (playerState === PlayerState.STARTED) {
+                            cachedPosition = mediaPlayer.currentPosition
                         }
-                        RxBus.playbackPositionPublisher.onNext(cachedPosition)
                     }
-                    Util.sleepQuietly(100L)
-                } catch (e: Exception) {
-                    Timber.w(e, "Crashed getting current position")
-                    isRunning = false
-                    positionCache = null
+                    RxBus.playbackPositionPublisher.onNext(cachedPosition)
                 }
+                delay(100)
+            } catch (e: Exception) {
+                if (e !is CancellationException)
+                    Timber.w(e, "Crashed getting current position")
+                return
             }
         }
     }
