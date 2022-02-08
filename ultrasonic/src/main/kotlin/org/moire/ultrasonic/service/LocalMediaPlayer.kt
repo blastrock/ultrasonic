@@ -436,7 +436,7 @@ class LocalMediaPlayer : KoinComponent {
                 }
 
                 postRunnable {
-                    onPrepared
+                    onPrepared?.let { it() }
                 }
             }
 
