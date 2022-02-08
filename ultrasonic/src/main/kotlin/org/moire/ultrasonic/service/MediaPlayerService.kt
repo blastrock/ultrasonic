@@ -94,7 +94,7 @@ class MediaPlayerService : Service() {
             null
         }
 
-        localMediaPlayer.onNextSongRequested = Runnable { setNextPlaying() }
+        localMediaPlayer.onNextSongRequested = this::setNextPlaying
 
         // Create Notification Channel
         createNotificationChannel()

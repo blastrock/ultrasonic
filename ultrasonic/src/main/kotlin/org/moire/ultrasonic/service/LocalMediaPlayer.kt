@@ -55,7 +55,7 @@ class LocalMediaPlayer : KoinComponent {
     var onPrepared: (() -> Any?)? = null
 
     @JvmField
-    var onNextSongRequested: Runnable? = null
+    var onNextSongRequested: (() -> Unit)? = null
 
     @JvmField
     @Volatile
@@ -256,7 +256,9 @@ class LocalMediaPlayer : KoinComponent {
 
         attachHandlersToPlayer(mediaPlayer, nextPlaying!!, false)
 
-        postRunnable(onNextSongRequested)
+        postRunnable {
+            onNextSongRequested?.let { it() }
+        }
 
         // Proxy should not be being used here since the next player was already setup to play
         proxy?.stop()
