@@ -33,11 +33,11 @@ class AudioFocusHandler(private val context: Context) {
             .build()
     }
 
-    fun requestAudioFocus() {
+    fun requestAudioFocus(): Boolean {
         if (!hasFocus) {
-            hasFocus = true
-            AudioManagerCompat.requestAudioFocus(audioManager, focusRequest)
+            hasFocus = (AudioManagerCompat.requestAudioFocus(audioManager, focusRequest) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED)
         }
+        return hasFocus
     }
 
     fun abandonAudioFocus() {

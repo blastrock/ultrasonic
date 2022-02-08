@@ -142,15 +142,18 @@ class LocalMediaPlayer : KoinComponent {
     }
 
     @Synchronized
-    fun setPlayerState(playerState: PlayerState, track: DownloadFile?) {
+    fun setPlayerState(playerState: PlayerState, track: DownloadFile?): Boolean {
         Timber.i("%s -> %s (%s)", this.playerState.name, playerState.name, track)
         val oldState = this.playerState
-        this.playerState = playerState
         if (oldState !== PlayerState.STARTED && playerState === PlayerState.STARTED) {
-            audioFocusHandler.requestAudioFocus()
+            if (!audioFocusHandler.requestAudioFocus()) {
+                Timber.i("Audio focus request was denied, aborting play")
+                return false
+            }
         } else if (oldState === PlayerState.STARTED && playerState !== PlayerState.STARTED) {
             audioFocusHandler.abandonAudioFocus()
         }
+        this.playerState = playerState
 
         RxBus.playerStatePublisher.onNext(RxBus.StateWithTrack(playerState, track))
 
@@ -163,6 +166,8 @@ class LocalMediaPlayer : KoinComponent {
             positionCacheScope!!.cancel()
             positionCacheScope = null
         }
+
+        return true
     }
 
     /*
@@ -229,8 +234,10 @@ class LocalMediaPlayer : KoinComponent {
 
         mediaPlayer = nextMediaPlayer!!
 
+        val playing = setPlayerState(PlayerState.STARTED, currentPlaying)
+        if (!playing)
+            return
         setCurrentPlaying(nextPlaying)
-        setPlayerState(PlayerState.STARTED, currentPlaying)
 
         attachHandlersToPlayer(mediaPlayer, nextPlaying!!, false)
 
@@ -404,8 +411,10 @@ class LocalMediaPlayer : KoinComponent {
                 }
                 cachedPosition = position
                 if (start) {
+                    val success = setPlayerState(PlayerState.STARTED, downloadFile)
+                    if (!success)
+                        return@setOnPreparedListener
                     mediaPlayer.start()
-                    setPlayerState(PlayerState.STARTED, downloadFile)
                 } else {
                     setPlayerState(PlayerState.PAUSED, downloadFile)
                 }
