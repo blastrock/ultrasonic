@@ -581,13 +581,13 @@ class MediaPlayerService : Service() {
         // Clear old actions
         notificationBuilder!!.clearActions()
 
-        if (song != null) {
-            // Add actions
-            val compactActions = addActions(context, notificationBuilder!!, playerState, song)
-            // Configure shortcut actions
-            style.setShowActionsInCompactView(*compactActions)
-            notificationBuilder!!.setStyle(style)
+        // Add actions
+        val compactActions = addActions(context, notificationBuilder!!, playerState, song)
+        // Configure shortcut actions
+        style.setShowActionsInCompactView(*compactActions)
+        notificationBuilder!!.setStyle(style)
 
+        if (song != null) {
             // Set song title, artist and cover
             val iconSize = (256 * context.resources.displayMetrics.density).toInt()
             val bitmap = BitmapUtils.getAlbumArtBitmapFromDisk(song, iconSize)
@@ -618,32 +618,32 @@ class MediaPlayerService : Service() {
         // Star
         if (song != null) {
             notificationBuilder.addAction(generateStarAction(context, numActions, song.starred))
+            numActions++
+
+            // Next
+            notificationBuilder.addAction(generateAction(context, numActions))
+            compactActionList.add(numActions)
+            numActions++
+
+            // Play/Pause button
+            notificationBuilder.addAction(generatePlayPauseAction(context, numActions, playerState))
+            compactActionList.add(numActions)
+            numActions++
+
+            // Previous
+            notificationBuilder.addAction(generateAction(context, numActions))
+            compactActionList.add(numActions)
+            numActions++
         }
-        numActions++
-
-        // Next
-        notificationBuilder.addAction(generateAction(context, numActions))
-        compactActionList.add(numActions)
-        numActions++
-
-        // Play/Pause button
-        notificationBuilder.addAction(generatePlayPauseAction(context, numActions, playerState))
-        compactActionList.add(numActions)
-        numActions++
-
-        // Previous
-        notificationBuilder.addAction(generateAction(context, numActions))
-        compactActionList.add(numActions)
-        numActions++
 
         // Close
         notificationBuilder.addAction(generateAction(context, numActions))
+
         val actionArray = IntArray(compactActionList.size)
         for (i in actionArray.indices) {
             actionArray[i] = compactActionList[i]
         }
         return actionArray
-        // notificationBuilder.setShowActionsInCompactView())
     }
 
     private fun generateAction(context: Context, requestCode: Int): NotificationCompat.Action? {
