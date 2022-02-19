@@ -506,7 +506,7 @@ class MediaPlayerService : Service() {
             channel.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
             channel.setShowBadge(false)
 
-            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            val manager = NotificationManagerCompat.from(this)
             manager.createNotificationChannel(channel)
         }
     }
@@ -516,13 +516,8 @@ class MediaPlayerService : Service() {
 
         if (Settings.isNotificationEnabled) {
             if (isInForeground) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                    manager.notify(NOTIFICATION_ID, notification)
-                } else {
-                    val manager = NotificationManagerCompat.from(this)
-                    manager.notify(NOTIFICATION_ID, notification)
-                }
+                val manager = NotificationManagerCompat.from(this)
+                manager.notify(NOTIFICATION_ID, notification)
                 Timber.v("Updated notification")
             } else {
                 startForeground(NOTIFICATION_ID, notification)
