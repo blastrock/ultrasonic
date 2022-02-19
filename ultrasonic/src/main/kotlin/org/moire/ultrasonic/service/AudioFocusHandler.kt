@@ -57,7 +57,8 @@ class AudioFocusHandler(private val context: Context) {
                 if (pauseFocus) {
                     pauseFocus = false
                     mediaPlayerController.softStart()
-                } else if (lowerFocus) {
+                }
+                if (lowerFocus) {
                     lowerFocus = false
                     mediaPlayerController.setVolume(1.0f)
                 }
@@ -83,7 +84,7 @@ class AudioFocusHandler(private val context: Context) {
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 if (!mediaPlayerController.isJukeboxEnabled) {
-                    Timber.v("Lost Audio Focus")
+                    Timber.v("Lost Audio Focus (can duck)")
 
                     if (mediaPlayerController.playerState === PlayerState.STARTED) {
                         if (lossPref == 2 || lossPref == 1) {
