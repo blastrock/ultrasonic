@@ -455,6 +455,7 @@ class MediaPlayerController(
 
     fun setVolume(volume: Float) {
         if (runningInstance != null) localMediaPlayer.setVolume(volume)
+        else Timber.e("instance is null, not sessing volume")
     }
 
     private fun updateNotification() {

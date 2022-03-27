@@ -57,10 +57,12 @@ class AudioFocusHandler(private val context: Context) {
                 if (pauseFocus) {
                     pauseFocus = false
                     mediaPlayerController.softStart()
+                    Timber.v("started again")
                 }
                 if (lowerFocus) {
                     lowerFocus = false
                     mediaPlayerController.setVolume(1.0f)
+                    Timber.v("restored volume")
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS -> {
@@ -90,9 +92,11 @@ class AudioFocusHandler(private val context: Context) {
                         if (lossPref == 2 || lossPref == 1) {
                             lowerFocus = true
                             mediaPlayerController.setVolume(0.1f)
+                            Timber.v("lowered volume")
                         } else if (lossPref == 0 || lossPref == 1) {
                             pauseFocus = true
                             mediaPlayerController.softPause()
+                            Timber.v("paused")
                         }
                     }
                 }

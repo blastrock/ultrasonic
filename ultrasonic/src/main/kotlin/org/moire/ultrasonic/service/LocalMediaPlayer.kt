@@ -144,6 +144,7 @@ class LocalMediaPlayer : KoinComponent {
     @Synchronized
     fun setPlayerState(playerState: PlayerState, track: DownloadFile?): Boolean {
         Timber.i("%s -> %s (%s)", this.playerState.name, playerState.name, track)
+        Timber.i("stack %s", Throwable().stackTraceToString());
         val oldState = this.playerState
         if (oldState !== PlayerState.STARTED && playerState === PlayerState.STARTED) {
             if (!audioFocusHandler.requestAudioFocus()) {

@@ -73,6 +73,7 @@ class MediaSessionHandler : KoinComponent {
         val keycode = 110
 
         Timber.d("MediaSessionHandler.initialize Creating Media Session")
+        Timber.d("stack %s", Throwable().stackTraceToString())
 
         mediaSession = MediaSessionCompat(applicationContext, "UltrasonicService")
         val mediaSessionToken = mediaSession?.sessionToken ?: return
