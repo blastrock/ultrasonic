@@ -85,21 +85,21 @@ class AudioFocusHandler(private val context: Context) {
                 }
             }
             AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                if (!mediaPlayerController.isJukeboxEnabled) {
-                    Timber.v("Lost Audio Focus (can duck)")
-
-                    if (mediaPlayerController.playerState === PlayerState.STARTED) {
-                        if (lossPref == 2 || lossPref == 1) {
-                            lowerFocus = true
-                            mediaPlayerController.setVolume(0.1f)
-                            Timber.v("lowered volume")
-                        } else if (lossPref == 0 || lossPref == 1) {
-                            pauseFocus = true
-                            mediaPlayerController.softPause()
-                            Timber.v("paused")
-                        }
-                    }
-                }
+//                if (!mediaPlayerController.isJukeboxEnabled) {
+//                    Timber.v("Lost Audio Focus (can duck)")
+//
+//                    if (mediaPlayerController.playerState === PlayerState.STARTED) {
+//                        if (lossPref == 2 || lossPref == 1) {
+//                            lowerFocus = true
+//                            mediaPlayerController.setVolume(0.1f)
+//                            Timber.v("lowered volume")
+//                        } else if (lossPref == 0 || lossPref == 1) {
+//                            pauseFocus = true
+//                            mediaPlayerController.softPause()
+//                            Timber.v("paused")
+//                        }
+//                    }
+//                }
             }
         }
     }
